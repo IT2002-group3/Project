@@ -399,7 +399,13 @@ def add_company():
     company_id = request.args.get('company_id')
     password = request.args.get('password')
     db = engine.connect()
-    query = sqlalchemy.text(f"INSERT INTO company VALUES ('{company_id}','{password}')")
+    #query = sqlalchemy.text(f"INSERT INTO company VALUES ('{company_id}','{password}')")
+    query= sqlalchemy.text(f'''
+    INSERT INTO company (company_id, password)
+    VALUES ('{company_id}', '{password}')
+    ON CONFLICT (company_id) DO UPDATE
+    SET password = EXCLUDED.password;
+''')
     results = db.execute(query)
     db.commit()
     db.close()
@@ -431,7 +437,16 @@ def add_user():
     ic_number=request.args.get('ic_number')
     password = request.args.get('password')
     db = engine.connect()
-    query = sqlalchemy.text(f"INSERT INTO users VALUES ('{first_name}','{last_name}','{dob}','{ic_number}','{password}')")
+    #query = sqlalchemy.text(f"INSERT INTO users VALUES ('{first_name}','{last_name}','{dob}','{ic_number}','{password}')")
+    query = sqlalchemy.text(f'''
+    INSERT INTO users (first_name, last_name, dob, ic_number, password)
+    VALUES ('{first_name}', '{last_name}', '{dob}', '{ic_number}', '{password}')
+    ON CONFLICT (ic_number) DO UPDATE
+    SET first_name = EXCLUDED.first_name,
+        last_name = EXCLUDED.last_name,
+        dob = EXCLUDED.dob,
+        password = EXCLUDED.password;
+''')
     results = db.execute(query)
     db.commit()
     db.close()
@@ -463,7 +478,16 @@ def admin_add_property():
     price=request.args.get('price')
     company_id = request.args.get('company_id')
     db = engine.connect()
-    query = sqlalchemy.text(f"INSERT INTO property VALUES ('{property_id}','{location}','{size}','{price}','{company_id}')")
+    #query = sqlalchemy.text(f"INSERT INTO property VALUES ('{property_id}','{location}','{size}','{price}','{company_id}')")
+    query = sqlalchemy.text(f'''
+    INSERT INTO property (property_id, location, size, price, company_id)
+    VALUES ('{property_id}', '{location}', {size}, {price}, '{company_id}')
+    ON CONFLICT (property_id) DO UPDATE
+    SET location = EXCLUDED.location,
+        size = EXCLUDED.size,
+        price = EXCLUDED.price,
+        company_id = EXCLUDED.company_id;
+''')
     results = db.execute(query)
     db.commit()
     db.close()
@@ -494,7 +518,15 @@ def admin_add_transaction():
     amount=request.args.get('amount')
     property_id = request.args.get('property_id')
     db = engine.connect()
-    query = sqlalchemy.text(f"INSERT INTO transactions VALUES ('{transaction_id}','{ic_number}','{property_id}','{amount}')")
+    #query = sqlalchemy.text(f"INSERT INTO transactions VALUES ('{transaction_id}','{ic_number}','{property_id}','{amount}')")
+    query = sqlalchemy.text(f'''
+    INSERT INTO transactions (transaction_id, ic_number, property_id, amount)
+    VALUES ({transaction_id}, '{ic_number}', '{property_id}', {amount})
+    ON CONFLICT (transaction_id) DO UPDATE
+    SET ic_number = EXCLUDED.ic_number,
+        property_id = EXCLUDED.property_id,
+        amount = EXCLUDED.amount;
+''')
     results = db.execute(query)
     db.commit()
     db.close()
@@ -505,4 +537,4 @@ def admin_add_transaction():
     return render_template('transaction_info.html', results=results)    
 
 if __name__ == "__main__":
-    app.run("0.0.0.0", 5000)
+    app.run("0.0.0.0", 5001)
