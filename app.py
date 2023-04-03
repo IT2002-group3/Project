@@ -147,34 +147,6 @@ def admin():
     return render_template('admin_login.html')
 
 
-"""
-schema to store users informations
-Create table users(
-first_name varchar(20) not null,
-last_name varchar(20) not null,
-dob date not null,
-ic_number varchar(20) not null,
-password varchar(20) not null,
-primary key(ic_number)
-);
-
-schema to store transaction information 
-Create table transactions(
-    transaction_id int not null,
-    company_id varchar(64) not null,
-    ic_number varchar(20) not null,
-    property_id varchar(64) not null,
-    amount int not null,
-    primary key (transaction_id),
-    foreign key (company_id) references company(company_id),
-    foreign key (property_id) references property(property_id),
-    foreign key (ic_number) references users(ic_number)
-)
-;
-"""
-
-
-
 @app.route('/userreg/', methods=['GET', 'POST'])
 def userreg():
     if request.method == 'GET':
@@ -193,7 +165,6 @@ def userreg():
             return render_template('userlogin.html')
         except sqlalchemy.exc.IntegrityError: 
             return render_template('userreg.html')
-
 
 
 @app.route('/userlogin/', methods=['GET', 'POST'])
@@ -253,7 +224,7 @@ def current():
 def invest():
     ic_number = session.get('ic_number')
     name = session.get('name')
-    #a sql query to get property_id, location, size, price, company_id from property table and sum of amount on that property from transaction table and status = sum(amount)/price * 100  less than 100 and display them in invest.html
+    #a sql query to get property_id, location, size, price, company_id from property table and sum of amount on that property from transaction table and status = sum(amount)/price * 100  less than 100 and display them in investsort.html
     query = sqlalchemy.text("""
     SELECT p.property_id, p.location, p.size, p.price, c.company_id, 
     SUM(t.amount) as amount, 
@@ -273,19 +244,73 @@ def invest():
     results = db.execute(query, {'ic_number' : ic_number}) 
     db.commit()
     db.close()
-    return render_template('invest.html', results=results, name=name)
+    return render_template('investsort.html', results=results, name=name)
+
+
+@app.route('/investsort/', methods = ['post','get'])
+def sort():
+    ic_number = session.get('ic_number')
+    name = session.get('name')
+    if request.method == 'POST':
+        sortby = request.form.get('sortby')
+        if sortby == 'asc':
+            query = sqlalchemy.text("""
+            SELECT p.property_id, p.location, p.size, p.price, c.company_id, 
+            SUM(t.amount) as amount, 
+            ROUND(SUM(t.amount)/p.price * 100, 2) as status
+            FROM property p, transactions t, company c
+            WHERE p.property_id = t.property_id
+            AND p.company_id = c.company_id
+            AND p.property_id NOT IN (
+                SELECT DISTINCT(p.property_id)
+                FROM property p, transactions t
+                WHERE p.property_id = t.property_id
+                AND t.ic_number = :ic_number)
+            GROUP BY p.property_id, p.location, p.size, p.price, c.company_id
+            HAVING ROUND(sum(t.amount)/p.price * 100, 2) < 100
+            ORDER BY status ASC
+            """)
+            db = engine.connect()
+            results = db.execute(query, {'ic_number' : ic_number}) 
+            db.commit()
+            db.close()
+            return render_template('investsort.html', results=results, name=name)
+        elif sortby == 'desc':
+            query = sqlalchemy.text("""
+            SELECT p.property_id, p.location, p.size, p.price, c.company_id, 
+            SUM(t.amount) as amount, 
+            ROUND(SUM(t.amount)/p.price * 100, 2) as status
+            FROM property p, transactions t, company c
+            WHERE p.property_id = t.property_id
+            AND p.company_id = c.company_id
+            AND p.property_id NOT IN (
+                SELECT DISTINCT(p.property_id)
+                FROM property p, transactions t
+                WHERE p.property_id = t.property_id
+                AND t.ic_number = :ic_number)
+            GROUP BY p.property_id, p.location, p.size, p.price, c.company_id
+            HAVING ROUND(sum(t.amount)/p.price * 100, 2) < 100
+            ORDER BY status DESC
+            """)
+            db = engine.connect()
+            results = db.execute(query, {'ic_number' : ic_number}) 
+            db.commit()
+            db.close()
+            return render_template('investsort.html', results=results, name=name)
+            
+
 
 @app.route('/successful/')
 def successful():
     ic_number = session.get('ic_number')
     name = session.get('name')
-    #reveives the amount the user wants to invest and the property_id from the invest.html
+    #reveives the amount the user wants to invest and the property_id from the investsort.html
     amount = request.args.get('amount')
     company_id = request.args.get('companyID')
     property_id = request.args.get('propertyID')
     #transaction_id is equal to the very last transaction id in the transaction table + 1
 
-    # get the property_id from the invest.html for which the user wants to invest and insert the following information into the transaction table including the amount the user wants to invest
+    # get the property_id from the investsort.html for which the user wants to invest and insert the following information into the transaction table including the amount the user wants to invest
     # and display the following information in successful.html
     db = engine.connect()
     query = sqlalchemy.text(f"INSERT INTO transactions VALUES (:transaction_id, :ic_number, :property_id, :amount)")
@@ -344,7 +369,7 @@ def Transaction_list():
     relation_name = request.args.get('name', default="", type=str)
     db = engine.connect()
     try:
-        statement = sqlalchemy.text(f"SELECT * FROM transactions;")
+        statement = sqlalchemy.text(f"SELECT * FROM transactions ORDER BY transaction_id ASC;")
         results = db.execute(statement)
         db.close()
         return render_template('transaction_info.html',results=results)
@@ -497,6 +522,7 @@ def admin_add_property():
     db.close()
     return render_template('property_info.html', results=results)    
 
+
 @app.route('/delete_transaction_listing/', methods = ["post", "get"])
 def delete_transaction_listing():
     transaction_id = request.form['transaction_id']
@@ -506,11 +532,12 @@ def delete_transaction_listing():
     db.commit()
     db.close()
     db = engine.connect()
-    statement = sqlalchemy.text(f"SELECT * FROM transactions;")
+    statement = sqlalchemy.text(f"SELECT * FROM transactions ORDER BY transaction_id ASC;")
     results = db.execute(statement)
     db.close()
     return render_template('transaction_info.html', results=results)
-        
+
+
 @app.route('/add_transaction/',methods = ["post", "get"])
 def admin_add_transaction():
     transaction_id = request.args.get('transaction_id')
@@ -531,7 +558,7 @@ def admin_add_transaction():
     db.commit()
     db.close()
     db = engine.connect()
-    statement = sqlalchemy.text(f"SELECT * FROM transactions;")
+    statement = sqlalchemy.text(f"SELECT * FROM transactions ORDER BY transaction_id ASC;")
     results = db.execute(statement)
     db.close()
     return render_template('transaction_info.html', results=results)    
